@@ -2,6 +2,8 @@ const express = require("express");
 const cors = require("cors");
 
 const ticketsRoutes = require("./modules/tickets/tickets.routes");
+const departmentsRoutes = require("./modules/departments/departments.route");
+const helpTopicsRoutes = require("./modules/help_topics/help_topics.routes");
 
 const app = express();
 
@@ -24,12 +26,16 @@ app.get("/", (req, res) => {
     message: "Support Ticket API Server is running",
     documentation: {
       tickets: "/api/tickets",
+      departments: "/api/departments",
+      help_topics: "/api/help-topics",
     },
   });
 });
 
 // API Routes
 app.use("/api/tickets", ticketsRoutes);
+app.use("/api/departments", departmentsRoutes);
+app.use("/api/help-topics", helpTopicsRoutes);
 
 // 404 Not Found Handler
 app.use((req, res, next) => {
