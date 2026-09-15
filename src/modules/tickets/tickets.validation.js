@@ -1,10 +1,14 @@
 const isInteger = (val) => {
   if (typeof val === "number") return Number.isInteger(val);
   if (typeof val === "string" && val.trim() !== "") {
-    return Number.isInteger(Number(val));
+    const num = Number(val);
+    return Number.isInteger(num) && !isNaN(num);
   }
   return false;
 };
+
+const VALID_PRIORITIES = ["LOW", "MEDIUM", "HIGH", "URGENT"];
+const VALID_STATUSES = ["PENDING", "IN_PROGRESS", "COMPLETE"];
 
 const validateCreateTicket = (data) => {
   const errors = [];
@@ -29,10 +33,25 @@ const validateCreateTicket = (data) => {
     errors.push("Mobile number is required.");
   }
 
+  if (data.department_id !== undefined && data.department_id !== null && !isInteger(data.department_id)) {
+    errors.push("department_id must be an integer.");
+  }
+
+  if (data.help_topic_id !== undefined && data.help_topic_id !== null && !isInteger(data.help_topic_id)) {
+    errors.push("help_topic_id must be an integer.");
+  }
+
   if (data.priority) {
     const uppercasePriority = String(data.priority).toUpperCase();
-    if (!["LOW", "MEDIUM", "HIGH", "URGENT"].includes(uppercasePriority)) {
-      errors.push("Priority must be one of: LOW, MEDIUM, HIGH, URGENT.");
+    if (!VALID_PRIORITIES.includes(uppercasePriority)) {
+      errors.push(`Priority must be one of: ${VALID_PRIORITIES.join(", ")}.`);
+    }
+  }
+
+  if (data.status) {
+    const uppercaseStatus = String(data.status).toUpperCase();
+    if (!VALID_STATUSES.includes(uppercaseStatus)) {
+      errors.push(`Status must be one of: ${VALID_STATUSES.join(", ")}.`);
     }
   }
 
@@ -52,20 +71,95 @@ const validateUpdateStatus = (data) => {
   }
 
   const uppercaseStatus = String(data.status).toUpperCase();
-  const validStatuses = ["PENDING", "IN_PROGRESS", "COMPLETE"];
 
-  if (!validStatuses.includes(uppercaseStatus)) {
+  if (!VALID_STATUSES.includes(uppercaseStatus)) {
     return {
       isValid: false,
-      errors: [`Status must be one of: ${validStatuses.join(", ")}`],
+      errors: [`Status must be one of: ${VALID_STATUSES.join(", ")}`],
     };
   }
 
   return { isValid: true, errors: [] };
 };
 
+const validateUpdateTicket = (data) => {
+  const errors = [];
+
+  if (!data || typeof data !== "object" || Object.keys(data).length === 0) {
+    return { isValid: false, errors: ["Request body with at least one field to update is required."] };
+  }
+
+  if (data.subject !== undefined) {
+    if (typeof data.subject !== "string" || !data.subject.trim()) {
+      errors.push("Subject must be a non-empty string.");
+    }
+  }
+
+  if (data.description !== undefined) {
+    if (typeof data.description !== "string" || !data.description.trim()) {
+      errors.push("Description must be a non-empty string.");
+    }
+  }
+
+  if (data.user_id !== undefined && data.user_id !== null && !isInteger(data.user_id)) {
+    errors.push("user_id must be an integer.");
+  }
+
+  if (data.mobile !== undefined) {
+    if (typeof data.mobile !== "string" || !data.mobile.trim()) {
+      errors.push("Mobile must be a non-empty string.");
+    }
+  }
+
+  if (data.room !== undefined && data.room !== null && typeof data.room !== "string") {
+    errors.push("room must be a string or null.");
+  }
+
+  if (data.pabx !== undefined && data.pabx !== null && typeof data.pabx !== "string") {
+    errors.push("pabx must be a string or null.");
+  }
+
+  if (data.department_id !== undefined && data.department_id !== null && !isInteger(data.department_id)) {
+    errors.push("department_id must be an integer or null.");
+  }
+
+  if (data.help_topic_id !== undefined && data.help_topic_id !== null && !isInteger(data.help_topic_id)) {
+    errors.push("help_topic_id must be an integer or null.");
+  }
+
+  if (data.priority !== undefined) {
+    const uppercasePriority = String(data.priority).toUpperCase();
+    if (!VALID_PRIORITIES.includes(uppercasePriority)) {
+      errors.push(`Priority must be one of: ${VALID_PRIORITIES.join(", ")}.`);
+    }
+  }
+
+  if (data.status !== undefined) {
+    const uppercaseStatus = String(data.status).toUpperCase();
+    if (!VALID_STATUSES.includes(uppercaseStatus)) {
+      errors.push(`Status must be one of: ${VALID_STATUSES.join(", ")}.`);
+    }
+  }
+
+  if (data.assigned_to !== undefined && data.assigned_to !== null && data.assigned_to !== "" && !isInteger(data.assigned_to)) {
+    errors.push("assigned_to must be an integer or null.");
+  }
+
+  if (data.total_pending_seconds !== undefined && !isInteger(data.total_pending_seconds)) {
+    errors.push("total_pending_seconds must be an integer.");
+  }
+
+  return {
+    isValid: errors.length === 0,
+    errors,
+  };
+};
+
 module.exports = {
   validateCreateTicket,
   validateUpdateStatus,
+  validateUpdateTicket,
   isInteger,
+  VALID_PRIORITIES,
+  VALID_STATUSES,
 };

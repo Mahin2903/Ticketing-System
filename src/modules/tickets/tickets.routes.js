@@ -6,7 +6,10 @@ const ticketsController = require("./tickets.controller");
 router.post("/", ticketsController.createTicket);
 router.get("/", ticketsController.getTickets);
 router.get("/:id", ticketsController.getTicketById);
+router.patch("/:id", ticketsController.updateTicket);
 router.patch("/:id/status", ticketsController.updateTicketStatus);
 router.patch("/:id/assign", ticketsController.assignTicket);
+router.delete("/:id", ticketsController.deleteTicket);
 
 module.exports = router;
+

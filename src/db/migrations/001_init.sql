@@ -21,6 +21,8 @@ CREATE TABLE tickets (
   subject TEXT NOT NULL,
   description TEXT NOT NULL,
   priority priority NOT NULL DEFAULT 'MEDIUM',
+  department_id INTEGER,
+  help_topic_id INTEGER,
   mobile TEXT NOT NULL,
   room TEXT,
   pabx TEXT,
@@ -33,4 +35,6 @@ CREATE TABLE tickets (
 
 CREATE INDEX IF NOT EXISTS idx_tickets_ticket_number ON tickets(ticket_number);
 CREATE INDEX IF NOT EXISTS idx_tickets_user_id ON tickets(user_id);
+CREATE INDEX IF NOT EXISTS idx_tickets_department_id ON tickets(department_id);
+CREATE INDEX IF NOT EXISTS idx_tickets_help_topic_id ON tickets(help_topic_id);
 CREATE INDEX IF NOT EXISTS idx_tickets_status ON tickets(status);
