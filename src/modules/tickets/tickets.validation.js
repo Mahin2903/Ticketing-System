@@ -83,6 +83,23 @@ const validateUpdateStatus = (data) => {
   return { isValid: true, errors: [] };
 };
 
+const validateUpdatePriority = (data) => {
+  if (!data || !data.priority) {
+    return { isValid: false, errors: ["Priority field is required."] };
+  }
+
+  const uppercasePriority = String(data.priority).toUpperCase();
+
+  if (!VALID_PRIORITIES.includes(uppercasePriority)) {
+    return {
+      isValid: false,
+      errors: [`Priority must be one of: ${VALID_PRIORITIES.join(", ")}`],
+    };
+  }
+
+  return { isValid: true, errors: [] };
+};
+
 const validateUpdateTicket = (data) => {
   const errors = [];
 
@@ -161,6 +178,7 @@ const validateUpdateTicket = (data) => {
 module.exports = {
   validateCreateTicket,
   validateUpdateStatus,
+  validateUpdatePriority,
   validateUpdateTicket,
   isInteger,
   VALID_PRIORITIES,

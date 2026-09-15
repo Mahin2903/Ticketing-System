@@ -28,19 +28,19 @@ const createTicket = async ({
     INSERT INTO tickets (
       ticket_number, user_id, subject, description, priority,
       department_id, help_topic_id, mobile, room, pabx, status, assigned_to
-    ) VALUES ($1, $2, $3, $4, $5::ticket_priority, $6, $7, $8, $9, $10, $11::ticket_status, $12)
+    ) VALUES ($1, $2, $3, $4, $5::priority, $6, $7, $8, $9, $10, $11::ticket_status, $12)
     RETURNING *
   `;
 
   const values = [
     ticketNumber,
     parseInt(user_id, 10),
-    subject.trim(),
-    description.trim(),
+    subject ? subject.trim() : "",
+    description ? description.trim() : "",
     formattedPriority,
-    parseInt(department_id, 10),
-    parseInt(help_topic_id, 10),
-    mobile.trim(),
+    department_id ? parseInt(department_id, 10) : null,
+    help_topic_id ? parseInt(help_topic_id, 10) : null,
+    mobile ? mobile.trim() : "",
     room ? room.trim() : null,
     pabx ? pabx.trim() : null,
     formattedStatus,
@@ -75,7 +75,7 @@ const getTickets = async ({
 
   if (priority) {
     queryParams.push(priority.toUpperCase());
-    conditions.push(`priority = $${queryParams.length}::ticket_priority`);
+    conditions.push(`priority = $${queryParams.length}::priority`);
   }
 
   if (department_id) {
@@ -138,6 +138,25 @@ const getTicketById = async (idOrNumber) => {
 };
 
 /**
+ * Update ticket priority with explicit ::priority cast for PostgreSQL
+ */
+const updateTicketPriority = async (idOrNumber, priority) => {
+  const isNumeric = !isNaN(Number(idOrNumber));
+  const formattedPriority = priority.toUpperCase();
+
+  const queryText = `
+    UPDATE tickets
+    SET priority = $1::priority
+    WHERE ${isNumeric ? "id = $2" : "ticket_number = $2"}
+    RETURNING *
+  `;
+
+  const value = isNumeric ? parseInt(idOrNumber, 10) : idOrNumber;
+  const result = await db.query(queryText, [formattedPriority, value]);
+  return result.rows[0] || null;
+};
+
+/**
  * Update ticket status with explicit ::ticket_status cast for PostgreSQL
  */
 const updateTicketStatus = async (idOrNumber, status) => {
@@ -189,7 +208,7 @@ const updateTicket = async (idOrNumber, updateFields) => {
 
       if (key === "priority" && val) {
         values.push(String(val).toUpperCase());
-        setClauses.push(`${key} = $${values.length}::ticket_priority`);
+        setClauses.push(`${key} = $${values.length}::priority`);
       } else if (key === "status" && val) {
         values.push(String(val).toUpperCase());
         setClauses.push(`${key} = $${values.length}::ticket_status`);
@@ -262,6 +281,7 @@ module.exports = {
   getTicketsbyEmail: getTicketsByEmail,
   getTicketById,
   updateTicket,
+  updateTicketPriority,
   updateTicketStatus,
   assignTicket,
   deleteTicket,

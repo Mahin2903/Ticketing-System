@@ -1,7 +1,7 @@
 -- 001_init.sql: Simple Tickets table initialization
 
 DO $$ BEGIN
-    CREATE TYPE priority AS ENUM ('LOW', 'MEDIUM', 'HIGH', 'URGENT');
+    CREATE TYPE priority AS ENUM ('LOW', 'MEDIUM', 'HIGH', 'CRITICAL', 'URGENT');
 EXCEPTION
     WHEN duplicate_object THEN null;
 END $$;

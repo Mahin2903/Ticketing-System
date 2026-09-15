@@ -2,6 +2,7 @@ const ticketsService = require("./tickets.service");
 const {
   validateCreateTicket,
   validateUpdateStatus,
+  validateUpdatePriority,
   validateUpdateTicket,
 } = require("./tickets.validation");
 
@@ -31,11 +32,21 @@ const createTicket = async (req, res, next) => {
 };
 
 /**
- * GET /api/tickets - Get tickets (supports filtering by status, priority, department, help_topic, user_id, email, assigned_to & pagination)
+ * GET /api/tickets - Get tickets with filters and pagination
  */
 const getTickets = async (req, res, next) => {
   try {
-    const { status, priority, department_id, help_topic_id, user_id, email, assigned_to, page = 1, limit = 20 } = req.query;
+    const {
+      status,
+      priority,
+      department_id,
+      help_topic_id,
+      user_id,
+      email,
+      assigned_to,
+      page = 1,
+      limit = 20,
+    } = req.query;
 
     const tickets = await ticketsService.getTickets({
       status,
@@ -102,41 +113,6 @@ const getTicketById = async (req, res, next) => {
 };
 
 /**
- * PATCH /api/tickets/:id - Update ticket details (supports all fields: status, priority, department_id, help_topic_id, assigned_to, subject, description, mobile, room, pabx, etc.)
- */
-const updateTicket = async (req, res, next) => {
-  try {
-    const validation = validateUpdateTicket(req.body);
-    if (!validation.isValid) {
-      return res.status(400).json({
-        success: false,
-        errors: validation.errors,
-      });
-    }
-
-    const updatedTicket = await ticketsService.updateTicket(
-      req.params.id,
-      req.body
-    );
-
-    if (!updatedTicket) {
-      return res.status(404).json({
-        success: false,
-        message: "Ticket not found",
-      });
-    }
-
-    res.json({
-      success: true,
-      message: "Ticket updated successfully",
-      data: updatedTicket,
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-/**
  * PATCH /api/tickets/:id/status - Update ticket status
  */
 const updateTicketStatus = async (req, res, next) => {
@@ -172,21 +148,21 @@ const updateTicketStatus = async (req, res, next) => {
 };
 
 /**
- * PATCH /api/tickets/:id/assign - Assign ticket
+ * PATCH /api/tickets/:id/priority - Update ticket priority
  */
-const assignTicket = async (req, res, next) => {
+const updateTicketPriority = async (req, res, next) => {
   try {
-    const { assigned_to } = req.body;
-    if (assigned_to === undefined || assigned_to === null || isNaN(Number(assigned_to))) {
+    const validation = validateUpdatePriority(req.body);
+    if (!validation.isValid) {
       return res.status(400).json({
         success: false,
-        message: "assigned_to field (integer) is required.",
+        errors: validation.errors,
       });
     }
 
-    const updatedTicket = await ticketsService.assignTicket(
+    const updatedTicket = await ticketsService.updateTicketPriority(
       req.params.id,
-      assigned_to
+      req.body.priority
     );
 
     if (!updatedTicket) {
@@ -198,7 +174,83 @@ const assignTicket = async (req, res, next) => {
 
     res.json({
       success: true,
-      message: "Ticket assigned successfully",
+      message: "Ticket priority updated successfully",
+      data: updatedTicket,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * PATCH /api/tickets/:id - Full or partial update of ticket fields
+ */
+const updateTicket = async (req, res, next) => {
+  try {
+    const validation = validateUpdateTicket(req.body);
+    if (!validation.isValid) {
+      return res.status(400).json({
+        success: false,
+        errors: validation.errors,
+      });
+    }
+
+    const updatedTicket = await ticketsService.updateTicket(
+      req.params.id,
+      req.body
+    );
+
+    if (!updatedTicket) {
+      return res.status(404).json({
+        success: false,
+        message: "Ticket not found",
+      });
+    }
+
+    res.json({
+      success: true,
+      message: "Ticket updated successfully",
+      data: updatedTicket,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * PATCH /api/tickets/:id/assign - Assign ticket
+ */
+const assignTicket = async (req, res, next) => {
+  try {
+    const { assigned_to } = req.body;
+    // Allow assigning to null / 0 to unassign
+    const targetUserId =
+      assigned_to === null || assigned_to === 0 || assigned_to === "0"
+        ? null
+        : parseInt(assigned_to, 10);
+
+    if (assigned_to !== null && assigned_to !== 0 && isNaN(targetUserId)) {
+      return res.status(400).json({
+        success: false,
+        message: "assigned_to must be an integer ID or null.",
+      });
+    }
+
+    const updatedTicket = await ticketsService.assignTicket(
+      req.params.id,
+      targetUserId
+    );
+
+    if (!updatedTicket) {
+      return res.status(404).json({
+        success: false,
+        message: "Ticket not found",
+      });
+    }
+
+    res.json({
+      success: true,
+      message: "Ticket assignment updated successfully",
       data: updatedTicket,
     });
   } catch (error) {
@@ -237,6 +289,7 @@ module.exports = {
   getTicketsbyEmail: getTicketsByEmail,
   getTicketById,
   updateTicket,
+  updateTicketPriority,
   updateTicketStatus,
   assignTicket,
   deleteTicket,
