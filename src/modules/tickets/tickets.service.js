@@ -1,12 +1,11 @@
 const db = require("../../config/db");
-const crypto = require("crypto");   
+const crypto = require("crypto");
 
 const generateTicketNumber = () => {
   const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, "");
   const randomSuffix = crypto.randomBytes(2).toString("hex").toUpperCase();
   return `TCK-${dateStr}-${randomSuffix}`;
 };
-
 
 const createTicket = async ({
   user_id,
@@ -29,7 +28,7 @@ const createTicket = async ({
     INSERT INTO tickets (
       ticket_number, user_id, subject, description, priority,
       department_id, help_topic_id, mobile, room, pabx, status, assigned_to
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+    ) VALUES ($1, $2, $3, $4, $5::ticket_priority, $6, $7, $8, $9, $10, $11::ticket_status, $12)
     RETURNING *
   `;
 
@@ -52,7 +51,6 @@ const createTicket = async ({
   return result.rows[0];
 };
 
-
 const getTickets = async ({
   status,
   priority,
@@ -72,12 +70,12 @@ const getTickets = async ({
 
   if (status) {
     queryParams.push(status.toUpperCase());
-    conditions.push(`status = $${queryParams.length}`);
+    conditions.push(`status = $${queryParams.length}::ticket_status`);
   }
 
   if (priority) {
     queryParams.push(priority.toUpperCase());
-    conditions.push(`priority = $${queryParams.length}`);
+    conditions.push(`priority = $${queryParams.length}::ticket_priority`);
   }
 
   if (department_id) {
@@ -121,13 +119,9 @@ const getTickets = async ({
   return result.rows;
 };
 
-/**
- * Get tickets by user email
- */
 const getTicketsByEmail = async (email, options = {}) => {
   return await getTickets({ ...options, email });
 };
-
 
 const getTicketById = async (idOrNumber) => {
   const isNumeric = !isNaN(Number(idOrNumber));
@@ -144,131 +138,108 @@ const getTicketById = async (idOrNumber) => {
 };
 
 /**
- * Update ticket by ID or Ticket Number with any combination of fields
+ * Update ticket status with explicit ::ticket_status cast for PostgreSQL
  */
-const updateTicket = async (idOrNumber, updateData = {}) => {
+const updateTicketStatus = async (idOrNumber, status) => {
   const isNumeric = !isNaN(Number(idOrNumber));
-  const updates = [];
-  const params = [];
-
-  const {
-    subject,
-    description,
-    priority,
-    status,
-    department_id,
-    help_topic_id,
-    user_id,
-    mobile,
-    room,
-    pabx,
-    assigned_to,
-    total_pending_seconds,
-  } = updateData;
-
-  if (subject !== undefined) {
-    params.push(subject.trim());
-    updates.push(`subject = $${params.length}`);
-  }
-
-  if (description !== undefined) {
-    params.push(description.trim());
-    updates.push(`description = $${params.length}`);
-  }
-
-  if (priority !== undefined) {
-    params.push(priority.toUpperCase());
-    updates.push(`priority = $${params.length}`);
-  }
-
-  if (status !== undefined) {
-    const formattedStatus = status.toUpperCase();
-    params.push(formattedStatus);
-    updates.push(`status = $${params.length}`);
-
-    // If status is COMPLETE, update completed_at if not already set, otherwise reset if moving back to PENDING/IN_PROGRESS
-    if (formattedStatus === "COMPLETE") {
-      updates.push(`completed_at = COALESCE(completed_at, NOW())`);
-    } else {
-      updates.push(`completed_at = NULL`);
-    }
-  }
-
-  if (department_id !== undefined) {
-    params.push(department_id === null || department_id === "" ? null : parseInt(department_id, 10));
-    updates.push(`department_id = $${params.length}`);
-  }
-
-  if (help_topic_id !== undefined) {
-    params.push(help_topic_id === null || help_topic_id === "" ? null : parseInt(help_topic_id, 10));
-    updates.push(`help_topic_id = $${params.length}`);
-  }
-
-  if (user_id !== undefined) {
-    params.push(parseInt(user_id, 10));
-    updates.push(`user_id = $${params.length}`);
-  }
-
-  if (mobile !== undefined) {
-    params.push(mobile.trim());
-    updates.push(`mobile = $${params.length}`);
-  }
-
-  if (room !== undefined) {
-    params.push(room ? room.trim() : null);
-    updates.push(`room = $${params.length}`);
-  }
-
-  if (pabx !== undefined) {
-    params.push(pabx ? pabx.trim() : null);
-    updates.push(`pabx = $${params.length}`);
-  }
-
-  if (assigned_to !== undefined) {
-    params.push(assigned_to === null || assigned_to === "" ? null : parseInt(assigned_to, 10));
-    updates.push(`assigned_to = $${params.length}`);
-  }
-
-  if (total_pending_seconds !== undefined) {
-    params.push(parseInt(total_pending_seconds, 10));
-    updates.push(`total_pending_seconds = $${params.length}`);
-  }
-
-  if (updates.length === 0) {
-    return await getTicketById(idOrNumber);
-  }
-
-  const idParamIndex = params.length + 1;
-  params.push(isNumeric ? parseInt(idOrNumber, 10) : idOrNumber);
+  const formattedStatus = status.toUpperCase();
 
   const queryText = `
     UPDATE tickets
-    SET ${updates.join(", ")}
-    WHERE ${isNumeric ? `id = $${idParamIndex}` : `ticket_number = $${idParamIndex}`}
+    SET 
+      status = $1::ticket_status,
+      completed_at = CASE 
+        WHEN $1 = 'COMPLETE' THEN NOW() 
+        WHEN $1 IN ('PENDING', 'IN_PROGRESS', 'HOLD') THEN NULL 
+        ELSE completed_at 
+      END
+    WHERE ${isNumeric ? "id = $2" : "ticket_number = $2"}
     RETURNING *
   `;
 
-  const result = await db.query(queryText, params);
+  const value = isNumeric ? parseInt(idOrNumber, 10) : idOrNumber;
+  const result = await db.query(queryText, [formattedStatus, value]);
   return result.rows[0] || null;
 };
 
 /**
- * Update ticket status (PENDING, IN_PROGRESS, COMPLETE)
+ * Dynamic full/partial ticket updates with enum casts
  */
-const updateTicketStatus = async (idOrNumber, status) => {
-  return await updateTicket(idOrNumber, { status });
+const updateTicket = async (idOrNumber, updateFields) => {
+  const isNumeric = !isNaN(Number(idOrNumber));
+  const allowedKeys = [
+    "subject",
+    "description",
+    "priority",
+    "status",
+    "assigned_to",
+    "department_id",
+    "help_topic_id",
+    "mobile",
+    "room",
+    "pabx",
+  ];
+
+  const setClauses = [];
+  const values = [];
+
+  for (const key of allowedKeys) {
+    if (updateFields[key] !== undefined) {
+      let val = updateFields[key];
+
+      if (key === "priority" && val) {
+        values.push(String(val).toUpperCase());
+        setClauses.push(`${key} = $${values.length}::ticket_priority`);
+      } else if (key === "status" && val) {
+        values.push(String(val).toUpperCase());
+        setClauses.push(`${key} = $${values.length}::ticket_status`);
+      } else if (key === "assigned_to" || key === "department_id" || key === "help_topic_id") {
+        values.push(val ? parseInt(val, 10) : null);
+        setClauses.push(`${key} = $${values.length}`);
+      } else {
+        values.push(val);
+        setClauses.push(`${key} = $${values.length}`);
+      }
+    }
+  }
+
+  if (updateFields.status) {
+    setClauses.push(
+      `completed_at = CASE WHEN '${String(updateFields.status).toUpperCase()}' = 'COMPLETE' THEN NOW() ELSE completed_at END`
+    );
+  }
+
+  if (setClauses.length === 0) return await getTicketById(idOrNumber);
+
+  values.push(isNumeric ? parseInt(idOrNumber, 10) : idOrNumber);
+  const whereIdentifier = isNumeric ? `id = $${values.length}` : `ticket_number = $${values.length}`;
+
+  const queryText = `
+    UPDATE tickets
+    SET ${setClauses.join(", ")}
+    WHERE ${whereIdentifier}
+    RETURNING *
+  `;
+
+  const result = await db.query(queryText, values);
+  return result.rows[0] || null;
 };
 
-/**
- * Assign ticket to agent/admin
- */
 const assignTicket = async (idOrNumber, assignedToUserId) => {
-  return await updateTicket(idOrNumber, { assigned_to: assignedToUserId });
+  const isNumeric = !isNaN(Number(idOrNumber));
+
+  const queryText = `
+    UPDATE tickets
+    SET assigned_to = $1
+    WHERE ${isNumeric ? "id = $2" : "ticket_number = $2"}
+    RETURNING *
+  `;
+
+  const value = isNumeric ? parseInt(idOrNumber, 10) : idOrNumber;
+  const result = await db.query(queryText, [assignedToUserId, value]);
+  return result.rows[0] || null;
 };
 
-/**
- * Delete ticket by ID or Ticket Number
- */
 const deleteTicket = async (idOrNumber) => {
   const isNumeric = !isNaN(Number(idOrNumber));
 

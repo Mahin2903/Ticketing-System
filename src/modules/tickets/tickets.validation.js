@@ -7,7 +7,8 @@ const isInteger = (val) => {
   return false;
 };
 
-const VALID_PRIORITIES = ["LOW", "MEDIUM", "HIGH", "URGENT"];
+// Reverted strictly to core supported values
+const VALID_PRIORITIES = ["LOW", "MEDIUM", "HIGH", "CRITICAL", "URGENT"];
 const VALID_STATUSES = ["PENDING", "IN_PROGRESS", "COMPLETE"];
 
 const validateCreateTicket = (data) => {
@@ -141,8 +142,10 @@ const validateUpdateTicket = (data) => {
     }
   }
 
-  if (data.assigned_to !== undefined && data.assigned_to !== null && data.assigned_to !== "" && !isInteger(data.assigned_to)) {
-    errors.push("assigned_to must be an integer or null.");
+  if (data.assigned_to !== undefined && data.assigned_to !== null && data.assigned_to !== "") {
+    if (!isInteger(data.assigned_to)) {
+      errors.push("assigned_to must be an integer or null.");
+    }
   }
 
   if (data.total_pending_seconds !== undefined && !isInteger(data.total_pending_seconds)) {
