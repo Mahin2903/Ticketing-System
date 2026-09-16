@@ -2,7 +2,6 @@ const ticketsService = require("./tickets.service");
 const {
   validateCreateTicket,
   validateUpdateStatus,
-  validateUpdatePriority,
   validateUpdateTicket,
 } = require("./tickets.validation");
 
@@ -148,41 +147,6 @@ const updateTicketStatus = async (req, res, next) => {
 };
 
 /**
- * PATCH /api/tickets/:id/priority - Update ticket priority
- */
-const updateTicketPriority = async (req, res, next) => {
-  try {
-    const validation = validateUpdatePriority(req.body);
-    if (!validation.isValid) {
-      return res.status(400).json({
-        success: false,
-        errors: validation.errors,
-      });
-    }
-
-    const updatedTicket = await ticketsService.updateTicketPriority(
-      req.params.id,
-      req.body.priority
-    );
-
-    if (!updatedTicket) {
-      return res.status(404).json({
-        success: false,
-        message: "Ticket not found",
-      });
-    }
-
-    res.json({
-      success: true,
-      message: "Ticket priority updated successfully",
-      data: updatedTicket,
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-/**
  * PATCH /api/tickets/:id - Full or partial update of ticket fields
  */
 const updateTicket = async (req, res, next) => {
@@ -289,7 +253,6 @@ module.exports = {
   getTicketsbyEmail: getTicketsByEmail,
   getTicketById,
   updateTicket,
-  updateTicketPriority,
   updateTicketStatus,
   assignTicket,
   deleteTicket,

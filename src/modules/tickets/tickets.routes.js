@@ -9,7 +9,6 @@ router.get("/:id", ticketsController.getTicketById);
 
 // Specific action routes
 router.patch("/:id/status", ticketsController.updateTicketStatus);
-router.patch("/:id/priority", ticketsController.updateTicketPriority);
 router.patch("/:id/assign", ticketsController.assignTicket);
 router.patch("/:id", ticketsController.updateTicket);
 router.delete("/:id", ticketsController.deleteTicket);

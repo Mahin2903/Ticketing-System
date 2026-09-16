@@ -35,12 +35,12 @@ const createTicket = async ({
   const values = [
     ticketNumber,
     parseInt(user_id, 10),
-    subject ? subject.trim() : "",
-    description ? description.trim() : "",
+    subject.trim(),
+    description.trim(),
     formattedPriority,
-    department_id ? parseInt(department_id, 10) : null,
-    help_topic_id ? parseInt(help_topic_id, 10) : null,
-    mobile ? mobile.trim() : "",
+    parseInt(department_id, 10),
+    parseInt(help_topic_id, 10),
+    mobile.trim(),
     room ? room.trim() : null,
     pabx ? pabx.trim() : null,
     formattedStatus,
@@ -137,28 +137,6 @@ const getTicketById = async (idOrNumber) => {
   return result.rows[0] || null;
 };
 
-/**
- * Update ticket priority with explicit ::priority cast for PostgreSQL
- */
-const updateTicketPriority = async (idOrNumber, priority) => {
-  const isNumeric = !isNaN(Number(idOrNumber));
-  const formattedPriority = priority.toUpperCase();
-
-  const queryText = `
-    UPDATE tickets
-    SET priority = $1::priority
-    WHERE ${isNumeric ? "id = $2" : "ticket_number = $2"}
-    RETURNING *
-  `;
-
-  const value = isNumeric ? parseInt(idOrNumber, 10) : idOrNumber;
-  const result = await db.query(queryText, [formattedPriority, value]);
-  return result.rows[0] || null;
-};
-
-/**
- * Update ticket status with explicit ::ticket_status cast for PostgreSQL
- */
 const updateTicketStatus = async (idOrNumber, status) => {
   const isNumeric = !isNaN(Number(idOrNumber));
   const formattedStatus = status.toUpperCase();
@@ -182,7 +160,7 @@ const updateTicketStatus = async (idOrNumber, status) => {
 };
 
 /**
- * Dynamic full/partial ticket updates with enum casts
+ * Dynamic full/partial ticket updates
  */
 const updateTicket = async (idOrNumber, updateFields) => {
   const isNumeric = !isNaN(Number(idOrNumber));
@@ -204,28 +182,33 @@ const updateTicket = async (idOrNumber, updateFields) => {
 
   for (const key of allowedKeys) {
     if (updateFields[key] !== undefined) {
-      let val = updateFields[key];
+      const val = updateFields[key];
 
       if (key === "priority" && val) {
         values.push(String(val).toUpperCase());
         setClauses.push(`${key} = $${values.length}::priority`);
       } else if (key === "status" && val) {
-        values.push(String(val).toUpperCase());
+        const formattedStatus = String(val).toUpperCase();
+        values.push(formattedStatus);
         setClauses.push(`${key} = $${values.length}::ticket_status`);
+
+        // Update completed_at safely with parameterized conditions
+        setClauses.push(
+          `completed_at = CASE 
+            WHEN $${values.length}::ticket_status = 'COMPLETE'::ticket_status THEN NOW() 
+            WHEN $${values.length}::ticket_status IN ('PENDING'::ticket_status, 'IN_PROGRESS'::ticket_status) THEN NULL 
+            ELSE completed_at 
+          END`
+        );
       } else if (key === "assigned_to" || key === "department_id" || key === "help_topic_id") {
         values.push(val ? parseInt(val, 10) : null);
-        setClauses.push(`${key} = $${values.length}`);
+        // Explicit ::integer cast prevents PostgreSQL null-parameter type resolution errors
+        setClauses.push(`${key} = $${values.length}::integer`);
       } else {
-        values.push(val);
+        values.push(val !== null ? String(val).trim() : null);
         setClauses.push(`${key} = $${values.length}`);
       }
     }
-  }
-
-  if (updateFields.status) {
-    setClauses.push(
-      `completed_at = CASE WHEN '${String(updateFields.status).toUpperCase()}' = 'COMPLETE' THEN NOW() ELSE completed_at END`
-    );
   }
 
   if (setClauses.length === 0) return await getTicketById(idOrNumber);
@@ -249,13 +232,14 @@ const assignTicket = async (idOrNumber, assignedToUserId) => {
 
   const queryText = `
     UPDATE tickets
-    SET assigned_to = $1
+    SET assigned_to = $1::integer
     WHERE ${isNumeric ? "id = $2" : "ticket_number = $2"}
     RETURNING *
   `;
 
   const value = isNumeric ? parseInt(idOrNumber, 10) : idOrNumber;
-  const result = await db.query(queryText, [assignedToUserId, value]);
+  const parsedUserId = assignedToUserId ? parseInt(assignedToUserId, 10) : null;
+  const result = await db.query(queryText, [parsedUserId, value]);
   return result.rows[0] || null;
 };
 
@@ -281,7 +265,6 @@ module.exports = {
   getTicketsbyEmail: getTicketsByEmail,
   getTicketById,
   updateTicket,
-  updateTicketPriority,
   updateTicketStatus,
   assignTicket,
   deleteTicket,
