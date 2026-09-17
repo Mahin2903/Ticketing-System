@@ -5,6 +5,8 @@ const ticketsRoutes = require("./modules/tickets/tickets.routes");
 const departmentsRoutes = require("./modules/departments/departments.route");
 const helpTopicsRoutes = require("./modules/help_topics/help_topics.routes");
 const usersRoutes = require("./modules/users/users.routes");
+const ticketRepliesRoutes = require("./modules/ticket_replies/ticket_replies.routes");
+const mailRoutes = require("./modules/mail/mail.routes");
 
 const app = express();
 
@@ -27,6 +29,8 @@ app.get("/", (req, res) => {
     message: "Support Ticket API Server is running",
     documentation: {
       tickets: "/api/tickets",
+      ticket_replies: "/api/ticket-replies",
+      mail: "/api/mail",
       departments: "/api/departments",
       help_topics: "/api/help-topics",
       users: "/api/users",
@@ -36,6 +40,8 @@ app.get("/", (req, res) => {
 
 // API Routes
 app.use("/api/tickets", ticketsRoutes);
+app.use("/api/ticket-replies", ticketRepliesRoutes);
+app.use("/api/mail", mailRoutes);
 app.use("/api/departments", departmentsRoutes);
 app.use("/api/help-topics", helpTopicsRoutes);
 app.use("/api/users", usersRoutes);

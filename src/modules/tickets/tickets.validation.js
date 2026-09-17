@@ -7,9 +7,9 @@ const isInteger = (val) => {
   return false;
 };
 
-// Reverted strictly to core supported values
+// Reverted strictly to core supported values with COMPLETED alias support
 const VALID_PRIORITIES = ["LOW", "MEDIUM", "HIGH", "CRITICAL", "URGENT"];
-const VALID_STATUSES = ["PENDING", "IN_PROGRESS", "COMPLETE"];
+const VALID_STATUSES = ["PENDING", "IN_PROGRESS", "COMPLETE", "COMPLETED"];
 
 const validateCreateTicket = (data) => {
   const errors = [];

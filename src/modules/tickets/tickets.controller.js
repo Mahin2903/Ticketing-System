@@ -151,7 +151,12 @@ const updateTicketStatus = async (req, res, next) => {
  */
 const updateTicket = async (req, res, next) => {
   try {
-    const validation = validateUpdateTicket(req.body);
+    const payload = { ...req.body };
+    if (payload.assignedToId !== undefined && payload.assigned_to === undefined) {
+      payload.assigned_to = payload.assignedToId;
+    }
+
+    const validation = validateUpdateTicket(payload);
     if (!validation.isValid) {
       return res.status(400).json({
         success: false,
@@ -161,7 +166,7 @@ const updateTicket = async (req, res, next) => {
 
     const updatedTicket = await ticketsService.updateTicket(
       req.params.id,
-      req.body
+      payload
     );
 
     if (!updatedTicket) {
@@ -186,17 +191,19 @@ const updateTicket = async (req, res, next) => {
  */
 const assignTicket = async (req, res, next) => {
   try {
-    const { assigned_to } = req.body;
+    const rawAssigned =
+      req.body.assignedToId !== undefined ? req.body.assignedToId : req.body.assigned_to;
+
     // Allow assigning to null / 0 to unassign
     const targetUserId =
-      assigned_to === null || assigned_to === 0 || assigned_to === "0"
+      rawAssigned === null || rawAssigned === 0 || rawAssigned === "0"
         ? null
-        : parseInt(assigned_to, 10);
+        : parseInt(rawAssigned, 10);
 
-    if (assigned_to !== null && assigned_to !== 0 && isNaN(targetUserId)) {
+    if (rawAssigned !== undefined && rawAssigned !== null && rawAssigned !== 0 && isNaN(targetUserId)) {
       return res.status(400).json({
         success: false,
-        message: "assigned_to must be an integer ID or null.",
+        message: "assignedToId / assigned_to must be an integer ID or null.",
       });
     }
 

@@ -1,5 +1,11 @@
 const db = require("../../config/db");
 const crypto = require("crypto");
+const {
+  sendTicketCreatedSuperAdminNotification,
+  sendTicketAssignedNotification,
+  sendTicketCompletedNotification,
+} = require("../../services/mail.service");
+const { isStaffRole } = require("../../utils/role.validator");
 
 const generateTicketNumber = () => {
   const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, "");
@@ -48,7 +54,23 @@ const createTicket = async ({
   ];
 
   const result = await db.query(queryText, values);
-  return result.rows[0];
+  const newTicket = result.rows[0];
+
+  // Step 1: Query PostgreSQL database for users where role is 'SUPER_ADMIN'
+  // and send an email notification exclusively to these super admins
+  db.query(`SELECT id, name, email, role FROM users WHERE UPPER(role) = 'SUPER_ADMIN'`)
+    .then((adminRes) => {
+      adminRes.rows.forEach((superAdmin) => {
+        if (superAdmin.email) {
+          sendTicketCreatedSuperAdminNotification(newTicket, superAdmin);
+        }
+      });
+    })
+    .catch((err) => {
+      console.error("Failed to query SUPER_ADMIN users for ticket notification:", err.message);
+    });
+
+  return newTicket;
 };
 
 const getTickets = async ({
@@ -139,7 +161,8 @@ const getTicketById = async (idOrNumber) => {
 
 const updateTicketStatus = async (idOrNumber, status) => {
   const isNumeric = !isNaN(Number(idOrNumber));
-  const formattedStatus = status.toUpperCase();
+  const rawStatus = (status || "").toUpperCase();
+  const formattedStatus = rawStatus === "COMPLETED" ? "COMPLETE" : rawStatus;
 
   const queryText = `
     UPDATE tickets
@@ -156,7 +179,22 @@ const updateTicketStatus = async (idOrNumber, status) => {
 
   const value = isNumeric ? parseInt(idOrNumber, 10) : idOrNumber;
   const result = await db.query(queryText, [formattedStatus, value]);
-  return result.rows[0] || null;
+  const updatedTicket = result.rows[0] || null;
+
+  // Step 4: When a ticket's status is updated to 'COMPLETED', fetch creator and send confirmation email
+  if ((formattedStatus === "COMPLETE" || rawStatus === "COMPLETED") && updatedTicket) {
+    db.query(`SELECT id, name, email FROM users WHERE id = $1`, [updatedTicket.user_id])
+      .then((creatorRes) => {
+        if (creatorRes.rows[0]?.email) {
+          sendTicketCompletedNotification(updatedTicket, creatorRes.rows[0]);
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to query creator for completion email:", err.message);
+      });
+  }
+
+  return updatedTicket;
 };
 
 /**
@@ -188,7 +226,8 @@ const updateTicket = async (idOrNumber, updateFields) => {
         values.push(String(val).toUpperCase());
         setClauses.push(`${key} = $${values.length}::priority`);
       } else if (key === "status" && val) {
-        const formattedStatus = String(val).toUpperCase();
+        const rawStatus = String(val).toUpperCase();
+        const formattedStatus = rawStatus === "COMPLETED" ? "COMPLETE" : rawStatus;
         values.push(formattedStatus);
         setClauses.push(`${key} = $${values.length}::ticket_status`);
 
@@ -224,7 +263,40 @@ const updateTicket = async (idOrNumber, updateFields) => {
   `;
 
   const result = await db.query(queryText, values);
-  return result.rows[0] || null;
+  const updatedTicket = result.rows[0] || null;
+
+  if (updatedTicket) {
+    // Check for status completion
+    const rawStatus = updateFields.status ? String(updateFields.status).toUpperCase() : "";
+    if (rawStatus === "COMPLETE" || rawStatus === "COMPLETED") {
+      db.query(`SELECT id, name, email FROM users WHERE id = $1`, [updatedTicket.user_id])
+        .then((creatorRes) => {
+          if (creatorRes.rows[0]?.email) {
+            sendTicketCompletedNotification(updatedTicket, creatorRes.rows[0]);
+          }
+        })
+        .catch((err) => {
+          console.error("Failed to query creator for completion email:", err.message);
+        });
+    }
+
+    // Check for assignment notification
+    if (updateFields.assigned_to) {
+      const assignedId = parseInt(updateFields.assigned_to, 10);
+      db.query(`SELECT id, name, email, role FROM users WHERE id = $1`, [assignedId])
+        .then((userRes) => {
+          const assignedUser = userRes.rows[0];
+          if (assignedUser?.email && isStaffRole(assignedUser.role)) {
+            sendTicketAssignedNotification(updatedTicket, assignedUser);
+          }
+        })
+        .catch((err) => {
+          console.error("Failed to query assigned user for assignment email:", err.message);
+        });
+    }
+  }
+
+  return updatedTicket;
 };
 
 const assignTicket = async (idOrNumber, assignedToUserId) => {
@@ -240,7 +312,24 @@ const assignTicket = async (idOrNumber, assignedToUserId) => {
   const value = isNumeric ? parseInt(idOrNumber, 10) : idOrNumber;
   const parsedUserId = assignedToUserId ? parseInt(assignedToUserId, 10) : null;
   const result = await db.query(queryText, [parsedUserId, value]);
-  return result.rows[0] || null;
+  const updatedTicket = result.rows[0] || null;
+
+  // Step 2: Ticket Assignment Notification
+  // Fetch assigned user's record and send email notification directly to that agent or admin
+  if (updatedTicket && parsedUserId) {
+    db.query(`SELECT id, name, email, role FROM users WHERE id = $1`, [parsedUserId])
+      .then((userRes) => {
+        const assignedUser = userRes.rows[0];
+        if (assignedUser?.email && isStaffRole(assignedUser.role)) {
+          sendTicketAssignedNotification(updatedTicket, assignedUser);
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to query assigned user for assignment email:", err.message);
+      });
+  }
+
+  return updatedTicket;
 };
 
 const deleteTicket = async (idOrNumber) => {

@@ -1,4 +1,5 @@
 const usersService = require("./users.service");
+const { isValidRole, normalizeRole, VALID_ROLES } = require("../../utils/role.validator");
 
 // Simple email regex for fast validation
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -23,6 +24,14 @@ const createUser = async (req, res) => {
     });
   }
 
+  // Validate role strictly against existing PostgreSQL user roles
+  if (role !== undefined && !isValidRole(role)) {
+    return res.status(400).json({
+      success: false,
+      message: `Invalid role '${role}'. Role must be one of: ${VALID_ROLES.join(", ")}.`,
+    });
+  }
+
   // ✅ Check if user already exists — return them instead of conflicting
   const existingUser = await usersService.getUserByEmail(email.trim());
   if (existingUser) {
@@ -36,7 +45,7 @@ const createUser = async (req, res) => {
   const user = await usersService.createUser({
     name,
     email,
-    role: role || "user",
+    role: normalizeRole(role || "USER"),
   });
 
   res.status(201).json({
@@ -132,10 +141,17 @@ const updateUser = async (req, res) => {
     });
   }
 
+  if (role !== undefined && !isValidRole(role)) {
+    return res.status(400).json({
+      success: false,
+      message: `Invalid role '${role}'. Role must be one of: ${VALID_ROLES.join(", ")}.`,
+    });
+  }
+
   const user = await usersService.updateUser(req.params.id, {
     name,
     email,
-    role,
+    role: role !== undefined ? normalizeRole(role) : undefined,
   });
 
   if (!user) {
