@@ -81,6 +81,64 @@ const emitTicketReply = (reply, ticket) => {
   }
 };
 
+/**
+ * Broadcast ticket feedback and notify the appropriate recipient(s).
+ * - Broadcasts to the ticket room (`ticket_${ticketId}`).
+ * - Notifies assigned agent and staff rooms (`role_admin`, `role_agent`).
+ *
+ * @param {Object} feedback - Joined feedback object with user info.
+ * @param {Object} ticket - Ticket object containing id, ticket_number, user_id, assigned_to, subject, status.
+ */
+const emitTicketFeedback = (feedback, ticket) => {
+  const io = getIO();
+  if (!io) {
+    console.warn("Socket.IO not initialized. Skipping real-time socket emit for feedback.");
+    return;
+  }
+
+  const payload = {
+    feedback,
+    ticket: {
+      id: ticket.id,
+      ticket_number: ticket.ticket_number,
+      subject: ticket.subject,
+      status: ticket.status,
+      user_id: ticket.user_id,
+      assigned_to: ticket.assigned_to,
+    },
+  };
+
+  // 1. Broadcast to the active ticket room
+  io.to(`ticket_${ticket.id}`).emit("ticket:feedback", payload);
+  io.to(`ticket_${ticket.id}`).emit("new_ticket_feedback", payload);
+
+  const notification = {
+    type: "TICKET_FEEDBACK",
+    ticket_id: ticket.id,
+    ticket_number: ticket.ticket_number,
+    subject: ticket.subject,
+    feedback: {
+      id: feedback.id,
+      user_id: feedback.user_id,
+      user_name: feedback.user_name,
+      comment: feedback.comment,
+      created_at: feedback.created_at,
+    },
+  };
+
+  // 2. Notify assigned staff member if ticket is assigned
+  if (ticket.assigned_to) {
+    io.to(`user_${ticket.assigned_to}`).emit("ticket:notification", notification);
+    io.to(`user_${ticket.assigned_to}`).emit("new_ticket_feedback", payload);
+  }
+
+  // 3. Notify admin and agent staff rooms
+  io.to("role_admin").emit("ticket:staff_notification", notification);
+  io.to("role_agent").emit("ticket:staff_notification", notification);
+};
+
 module.exports = {
   emitTicketReply,
+  emitTicketFeedback,
 };
+

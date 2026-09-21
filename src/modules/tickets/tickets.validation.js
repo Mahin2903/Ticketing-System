@@ -60,6 +60,10 @@ const validateCreateTicket = (data) => {
     errors.push("assigned_to must be an integer.");
   }
 
+  if (data.building_name !== undefined && data.building_name !== null && typeof data.building_name !== "string") {
+    errors.push("building_name must be a string.");
+  }
+
   return {
     isValid: errors.length === 0,
     errors,
@@ -118,6 +122,10 @@ const validateUpdateTicket = (data) => {
 
   if (data.pabx !== undefined && data.pabx !== null && typeof data.pabx !== "string") {
     errors.push("pabx must be a string or null.");
+  }
+
+  if (data.building_name !== undefined && data.building_name !== null && typeof data.building_name !== "string") {
+    errors.push("building_name must be a string or null.");
   }
 
   if (data.department_id !== undefined && data.department_id !== null && !isInteger(data.department_id)) {

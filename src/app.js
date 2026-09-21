@@ -6,6 +6,7 @@ const departmentsRoutes = require("./modules/departments/departments.route");
 const helpTopicsRoutes = require("./modules/help_topics/help_topics.routes");
 const usersRoutes = require("./modules/users/users.routes");
 const ticketRepliesRoutes = require("./modules/ticket_replies/ticket_replies.routes");
+const ticketFeedbackRoutes = require("./modules/ticket_feedback/ticket_feedback.routes");
 const mailRoutes = require("./modules/mail/mail.routes");
 
 const app = express();
@@ -30,6 +31,7 @@ app.get("/", (req, res) => {
     documentation: {
       tickets: "/api/tickets",
       ticket_replies: "/api/ticket-replies",
+      ticket_feedback: "/api/ticket-feedback",
       mail: "/api/mail",
       departments: "/api/departments",
       help_topics: "/api/help-topics",
@@ -41,6 +43,7 @@ app.get("/", (req, res) => {
 // API Routes
 app.use("/api/tickets", ticketsRoutes);
 app.use("/api/ticket-replies", ticketRepliesRoutes);
+app.use("/api/ticket-feedback", ticketFeedbackRoutes);
 app.use("/api/mail", mailRoutes);
 app.use("/api/departments", departmentsRoutes);
 app.use("/api/help-topics", helpTopicsRoutes);

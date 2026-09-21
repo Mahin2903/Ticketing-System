@@ -194,7 +194,6 @@ const assignTicket = async (req, res, next) => {
     const rawAssigned =
       req.body.assignedToId !== undefined ? req.body.assignedToId : req.body.assigned_to;
 
-    // Allow assigning to null / 0 to unassign
     const targetUserId =
       rawAssigned === null || rawAssigned === 0 || rawAssigned === "0"
         ? null
@@ -207,9 +206,13 @@ const assignTicket = async (req, res, next) => {
       });
     }
 
+    // Extract note — null it out when unassigning
+    const assignmentNote = targetUserId === null ? null : (req.body.assignment_note ?? null);
+
     const updatedTicket = await ticketsService.assignTicket(
       req.params.id,
-      targetUserId
+      targetUserId,
+      assignmentNote
     );
 
     if (!updatedTicket) {

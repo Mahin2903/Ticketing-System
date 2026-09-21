@@ -4,14 +4,19 @@ const db = require("../../config/db");
 /**
  * Create a new user
  */
-const createUser = async ({ name, email, role = "user" }) => {
+const createUser = async ({ name, email, role = "user", role_category_id = null }) => {
   const queryText = `
-    INSERT INTO users (name, email, role)
-    VALUES ($1, $2, $3)
-    RETURNING id, name, email, role, created_at
+    INSERT INTO users (name, email, role, role_category_id)
+    VALUES ($1, $2, $3, $4)
+    RETURNING id, name, email, role, role_category_id, created_at
   `;
 
-  const values = [name.trim(), email.trim().toLowerCase(), role.trim()];
+  const values = [
+    name.trim(),
+    email.trim().toLowerCase(),
+    role.trim(),
+    role_category_id ? parseInt(role_category_id, 10) : null,
+  ];
   const result = await db.query(queryText, values);
   return result.rows[0];
 };
@@ -20,7 +25,7 @@ const createUser = async ({ name, email, role = "user" }) => {
  * Get users with optional pagination, role filtering, and search
  */
 const getAllUsers = async (query = {}) => {
-  const { role, email, search, page = 1, limit = 20 } = query;
+  const { role, email, search, role_category_id, page = 1, limit = 20 } = query;
   const conditions = [];
   const params = [];
 
@@ -32,6 +37,11 @@ const getAllUsers = async (query = {}) => {
   if (email) {
     params.push(email.trim().toLowerCase());
     conditions.push(`LOWER(email) = $${params.length}`);
+  }
+
+  if (role_category_id) {
+    params.push(parseInt(role_category_id, 10));
+    conditions.push(`role_category_id = $${params.length}`);
   }
 
   if (search) {
@@ -49,7 +59,7 @@ const getAllUsers = async (query = {}) => {
   // Run data query and total count query in parallel for high performance
   const countQuery = `SELECT COUNT(*)::int AS total FROM users ${whereClause}`;
   const dataQuery = `
-    SELECT id, name, email, role, created_at
+    SELECT id, name, email, role, role_category_id, created_at
     FROM users
     ${whereClause}
     ORDER BY id ASC
@@ -75,7 +85,7 @@ const getAllUsers = async (query = {}) => {
  */
 const getUserById = async (id) => {
   const queryText = `
-    SELECT id, name, email, role, created_at
+    SELECT id, name, email, role, role_category_id, created_at
     FROM users
     WHERE id = $1
   `;
@@ -88,7 +98,7 @@ const getUserById = async (id) => {
  * Update user by ID
  */
 const updateUser = async (id, data) => {
-  const { name, email, role } = data;
+  const { name, email, role, role_category_id } = data;
   const updates = [];
   const params = [];
 
@@ -107,6 +117,15 @@ const updateUser = async (id, data) => {
     updates.push(`role = $${params.length}`);
   }
 
+  if (role_category_id !== undefined) {
+    const parsedCatId =
+      role_category_id === null || role_category_id === "null" || role_category_id === 0 || role_category_id === "0"
+        ? null
+        : parseInt(role_category_id, 10);
+    params.push(parsedCatId);
+    updates.push(`role_category_id = $${params.length}`);
+  }
+
   if (updates.length === 0) {
     return await getUserById(id);
   }
@@ -116,7 +135,7 @@ const updateUser = async (id, data) => {
     UPDATE users
     SET ${updates.join(", ")}
     WHERE id = $${params.length}
-    RETURNING id, name, email, role, created_at
+    RETURNING id, name, email, role, role_category_id, created_at
   `;
 
   const result = await db.query(queryText, params);
@@ -128,7 +147,7 @@ const updateUser = async (id, data) => {
  */
 const getUserByEmail = async (email) => {
   const queryText = `
-    SELECT id, name, email, role, created_at
+    SELECT id, name, email, role, role_category_id, created_at
     FROM users
     WHERE LOWER(email) = LOWER($1)
   `;
@@ -144,7 +163,7 @@ const deleteUser = async (id) => {
   const queryText = `
     DELETE FROM users
     WHERE id = $1
-    RETURNING id, name, email, role, created_at
+    RETURNING id, name, email, role, role_category_id, created_at
   `;
 
   const result = await db.query(queryText, [parseInt(id, 10)]);

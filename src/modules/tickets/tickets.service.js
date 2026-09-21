@@ -1,9 +1,9 @@
 const db = require("../../config/db");
 const crypto = require("crypto");
 const {
-  sendTicketCreatedSuperAdminNotification,
   sendTicketAssignedNotification,
   sendTicketCompletedNotification,
+  sendTicketCategoryMatchedNotification,
 } = require("../../services/mail.service");
 const { isStaffRole } = require("../../utils/role.validator");
 
@@ -25,6 +25,7 @@ const createTicket = async ({
   priority = "MEDIUM",
   status = "PENDING",
   assigned_to = null,
+  building_name = null,
 }) => {
   const ticketNumber = generateTicketNumber();
   const formattedPriority = (priority || "MEDIUM").toUpperCase();
@@ -33,8 +34,8 @@ const createTicket = async ({
   const queryText = `
     INSERT INTO tickets (
       ticket_number, user_id, subject, description, priority,
-      department_id, help_topic_id, mobile, room, pabx, status, assigned_to
-    ) VALUES ($1, $2, $3, $4, $5::priority, $6, $7, $8, $9, $10, $11::ticket_status, $12)
+      department_id, help_topic_id, mobile, room, pabx, status, assigned_to, building_name
+    ) VALUES ($1, $2, $3, $4, $5::priority, $6, $7, $8, $9, $10, $11::ticket_status, $12, COALESCE($13, 'Administration Building'))
     RETURNING *
   `;
 
@@ -51,24 +52,33 @@ const createTicket = async ({
     pabx ? pabx.trim() : null,
     formattedStatus,
     assigned_to ? parseInt(assigned_to, 10) : null,
+    building_name ? building_name.trim() : null,
   ];
 
   const result = await db.query(queryText, values);
   const newTicket = result.rows[0];
 
-  // Step 1: Query PostgreSQL database for users where role is 'SUPER_ADMIN'
-  // and send an email notification exclusively to these super admins
-  db.query(`SELECT id, name, email, role FROM users WHERE UPPER(role) = 'SUPER_ADMIN'`)
-    .then((adminRes) => {
-      adminRes.rows.forEach((superAdmin) => {
-        if (superAdmin.email) {
-          sendTicketCreatedSuperAdminNotification(newTicket, superAdmin);
-        }
+  // Only the specific user(s) whose role_category_id matches the ticket's help_topic_id
+  // will receive the email notification on ticket creation.
+  if (newTicket.help_topic_id) {
+    db.query(
+      `SELECT u.id, u.name, u.email, u.role, u.role_category_id, ht.topic_title, ht.topic_code
+       FROM users u
+       LEFT JOIN help_topics ht ON u.role_category_id = ht.id
+       WHERE u.role_category_id = $1`,
+      [newTicket.help_topic_id]
+    )
+      .then((matchedRes) => {
+        matchedRes.rows.forEach((matchedUser) => {
+          if (matchedUser.email) {
+            sendTicketCategoryMatchedNotification(newTicket, matchedUser);
+          }
+        });
+      })
+      .catch((err) => {
+        console.error("Failed to query category-matched users for ticket notification:", err.message);
       });
-    })
-    .catch((err) => {
-      console.error("Failed to query SUPER_ADMIN users for ticket notification:", err.message);
-    });
+  }
 
   return newTicket;
 };
@@ -156,7 +166,32 @@ const getTicketById = async (idOrNumber) => {
 
   const value = isNumeric ? parseInt(idOrNumber, 10) : idOrNumber;
   const result = await db.query(queryText, [value]);
-  return result.rows[0] || null;
+  const ticket = result.rows[0] || null;
+
+  if (!ticket) return null;
+
+  // Query and attach associated feedback
+  const feedbackResult = await db.query(
+    `SELECT 
+       tf.id,
+       tf.ticket_id,
+       tf.user_id,
+       tf.comment,
+       tf.created_at,
+       u.name AS user_name,
+       u.email AS user_email,
+       u.role AS user_role
+     FROM ticket_feedback tf
+     JOIN users u ON tf.user_id = u.id
+     WHERE tf.ticket_id = $1
+     ORDER BY tf.created_at DESC`,
+    [ticket.id]
+  );
+
+  ticket.feedback = feedbackResult.rows[0] || null;
+  ticket.feedbacks = feedbackResult.rows;
+
+  return ticket;
 };
 
 const updateTicketStatus = async (idOrNumber, status) => {
@@ -213,6 +248,7 @@ const updateTicket = async (idOrNumber, updateFields) => {
     "mobile",
     "room",
     "pabx",
+    "building_name",
   ];
 
   const setClauses = [];
@@ -299,23 +335,23 @@ const updateTicket = async (idOrNumber, updateFields) => {
   return updatedTicket;
 };
 
-const assignTicket = async (idOrNumber, assignedToUserId) => {
+const assignTicket = async (idOrNumber, assignedToUserId, assignmentNote = null) => {
   const isNumeric = !isNaN(Number(idOrNumber));
 
   const queryText = `
     UPDATE tickets
-    SET assigned_to = $1::integer
-    WHERE ${isNumeric ? "id = $2" : "ticket_number = $2"}
+    SET 
+      assigned_to = $1::integer,
+      assignment_note = $2
+    WHERE ${isNumeric ? "id = $3" : "ticket_number = $3"}
     RETURNING *
   `;
 
   const value = isNumeric ? parseInt(idOrNumber, 10) : idOrNumber;
   const parsedUserId = assignedToUserId ? parseInt(assignedToUserId, 10) : null;
-  const result = await db.query(queryText, [parsedUserId, value]);
+  const result = await db.query(queryText, [parsedUserId, assignmentNote, value]);
   const updatedTicket = result.rows[0] || null;
 
-  // Step 2: Ticket Assignment Notification
-  // Fetch assigned user's record and send email notification directly to that agent or admin
   if (updatedTicket && parsedUserId) {
     db.query(`SELECT id, name, email, role FROM users WHERE id = $1`, [parsedUserId])
       .then((userRes) => {

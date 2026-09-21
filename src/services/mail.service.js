@@ -397,6 +397,174 @@ const sendUserReplyNotification = async (ticket, staffUser, reply) => {
   return sendMail({ to: staffEmail, subject, text, html });
 };
 
+/**
+ * Step 6: User Feedback Notification
+ * Sent to the assigned staff/admin when the user provides feedback on a completed ticket.
+ */
+const sendTicketFeedbackNotification = async (ticket, staffUser, feedback) => {
+  const staffEmail = staffUser.email || staffUser;
+  const staffName = staffUser.name || "Staff";
+  const userName = feedback.user_name || "Customer";
+  const comment = feedback.comment || "";
+
+  const subject = `[Ticket Feedback] #${ticket.ticket_number}: ${ticket.subject}`;
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 20px; color: #1e293b; }
+        .container { max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+        .header { background: #059669; color: #ffffff; padding: 20px; text-align: center; }
+        .header h1 { margin: 0; font-size: 20px; }
+        .content { padding: 24px; }
+        .feedback-meta { font-size: 13px; color: #64748b; margin-bottom: 8px; }
+        .feedback-box { background: #ecfdf5; border-left: 4px solid #10b981; padding: 16px; border-radius: 0 6px 6px 0; margin-top: 8px; font-size: 15px; line-height: 1.6; color: #065f46; }
+        .details-table { width: 100%; border-collapse: collapse; margin-top: 16px; margin-bottom: 20px; }
+        .details-table td { padding: 8px 0; border-bottom: 1px solid #f1f5f9; font-size: 14px; }
+        .details-table td.label { font-weight: 600; color: #64748b; width: 130px; }
+        .footer { background: #f8fafc; padding: 16px; text-align: center; font-size: 12px; color: #94a3b8; border-top: 1px solid #e2e8f0; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>New Customer Feedback</h1>
+        </div>
+        <div class="content">
+          <p>Hello <strong>${staffName}</strong>,</p>
+          <p>Customer feedback has been submitted for resolved ticket <strong>#${ticket.ticket_number}</strong>:</p>
+
+          <table class="details-table">
+            <tr>
+              <td class="label">Ticket Number:</td>
+              <td><strong>${ticket.ticket_number}</strong></td>
+            </tr>
+            <tr>
+              <td class="label">Subject:</td>
+              <td>${ticket.subject}</td>
+            </tr>
+            <tr>
+              <td class="label">Status:</td>
+              <td>${ticket.status || "COMPLETE"}</td>
+            </tr>
+          </table>
+
+          <div class="feedback-meta">
+            Feedback from: <strong>${userName}</strong>
+          </div>
+          <div class="feedback-box">
+            ${comment.replace(/\n/g, "<br>")}
+          </div>
+        </div>
+        <div class="footer">
+          Ticketing System &bull; Feedback Notification
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  const text = `Hello ${staffName},\n\nCustomer ${userName} submitted feedback for ticket #${ticket.ticket_number}:\n\n"${comment}"`;
+
+  return sendMail({ to: staffEmail, subject, text, html });
+};
+
+/**
+ * Step 7: Category-Matched User Notification
+ * Sent to staff/users whose role_category_id matches the ticket's help_topic_id upon ticket creation.
+ */
+const sendTicketCategoryMatchedNotification = async (ticket, matchedUser) => {
+  const userEmail = matchedUser.email || matchedUser;
+  const userName = matchedUser.name || "Support Specialist";
+  const categoryTitle = matchedUser.topic_title || "Assigned Category";
+  const categoryCode = matchedUser.topic_code ? ` [${matchedUser.topic_code}]` : "";
+
+  const subject = `[New Ticket Alert - ${categoryTitle}] #${ticket.ticket_number}: ${ticket.subject}`;
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 20px; color: #1e293b; }
+        .container { max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+        .header { background: #0d9488; color: #ffffff; padding: 20px; text-align: center; }
+        .header h1 { margin: 0; font-size: 20px; }
+        .content { padding: 24px; }
+        .badge { display: inline-block; padding: 4px 10px; border-radius: 9999px; font-size: 12px; font-weight: 600; text-transform: uppercase; background: #e0f2fe; color: #0369a1; }
+        .badge-priority { background: #fee2e2; color: #b91c1c; }
+        .category-banner { background: #f0fdfa; border-left: 4px solid #0d9488; padding: 12px 16px; border-radius: 0 6px 6px 0; margin-bottom: 18px; font-size: 14px; color: #134e4a; }
+        .details-table { width: 100%; border-collapse: collapse; margin-top: 12px; margin-bottom: 20px; }
+        .details-table td { padding: 8px 0; border-bottom: 1px solid #f1f5f9; font-size: 14px; }
+        .details-table td.label { font-weight: 600; color: #64748b; width: 140px; }
+        .message-box { background: #f8fafc; border-left: 4px solid #0d9488; padding: 14px; border-radius: 0 6px 6px 0; margin-top: 10px; font-size: 14px; line-height: 1.6; }
+        .footer { background: #f8fafc; padding: 16px; text-align: center; font-size: 12px; color: #94a3b8; border-top: 1px solid #e2e8f0; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>New Category Ticket Alert</h1>
+        </div>
+        <div class="content">
+          <p>Hello <strong>${userName}</strong>,</p>
+          <div class="category-banner">
+            A new support ticket has been submitted matching your category specialization: <strong>${categoryTitle}${categoryCode}</strong>.
+          </div>
+
+          <table class="details-table">
+            <tr>
+              <td class="label">Ticket Number:</td>
+              <td><strong>${ticket.ticket_number}</strong></td>
+            </tr>
+            <tr>
+              <td class="label">Subject:</td>
+              <td>${ticket.subject}</td>
+            </tr>
+            <tr>
+              <td class="label">Category:</td>
+              <td><strong>${categoryTitle}${categoryCode}</strong></td>
+            </tr>
+            <tr>
+              <td class="label">Priority:</td>
+              <td><span class="badge badge-priority">${ticket.priority || "MEDIUM"}</span></td>
+            </tr>
+            ${ticket.building_name ? `<tr><td class="label">Building:</td><td>${ticket.building_name}</td></tr>` : ""}
+            ${ticket.room ? `<tr><td class="label">Room:</td><td>${ticket.room}</td></tr>` : ""}
+            ${ticket.pabx ? `<tr><td class="label">PABX:</td><td>${ticket.pabx}</td></tr>` : ""}
+            ${ticket.mobile ? `<tr><td class="label">Mobile:</td><td>${ticket.mobile}</td></tr>` : ""}
+            <tr>
+              <td class="label">Status:</td>
+              <td>${ticket.status || "PENDING"}</td>
+            </tr>
+          </table>
+
+          <div style="font-weight: 600; font-size: 14px; color: #475569;">Description:</div>
+          <div class="message-box">
+            ${ticket.description ? ticket.description.replace(/\n/g, "<br>") : "No description provided."}
+          </div>
+
+          <p style="font-size: 13px; color: #64748b; margin-top: 20px;">
+            Please log in to the dashboard to review, claim, or take action on this ticket.
+          </p>
+        </div>
+        <div class="footer">
+          Ticketing System &bull; Category Specialization Alert
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  const text = `Hello ${userName},\n\nA new ticket matching your category (${categoryTitle}${categoryCode}) has been submitted.\n\nTicket: #${ticket.ticket_number}\nSubject: ${ticket.subject}\nPriority: ${ticket.priority}\nStatus: ${ticket.status || "PENDING"}\nDescription:\n${ticket.description}`;
+
+  return sendMail({ to: userEmail, subject, text, html });
+};
+
 module.exports = {
   sendMail,
   sendTicketCreatedSuperAdminNotification,
@@ -404,7 +572,11 @@ module.exports = {
   sendAgentResponseNotification,
   sendUserReplyNotification,
   sendTicketCompletedNotification,
+  sendTicketFeedbackNotification,
+  sendTicketCategoryMatchedNotification,
   // Retain legacy aliases for backward compatibility
   sendTicketCreatedNotification: sendTicketCreatedSuperAdminNotification,
   sendTicketReplyNotification: sendAgentResponseNotification,
 };
+
+
