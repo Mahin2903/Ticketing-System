@@ -1,74 +1,117 @@
 const usersService = require("./users.service");
-const { isValidRole, normalizeRole, VALID_ROLES } = require("../../utils/role.validator");
+const { isValidRole, normalizeRole, VALID_ROLES } = require("../../services/firebaseAuth.service");
+const firebaseAuthService = require("../../services/firebaseAuth.service");
 
 // Simple email regex for fast validation
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /**
- * POST /api/users - Create a new user
+ * POST /api/users - Create a new user (prevents self-service admin promotion)
  */
-const createUser = async (req, res) => {
-  const { name, email, role } = req.body;
+const createUser = async (req, res, next) => {
+  try {
+    const { name, email, role } = req.body;
+    const authUser = req.user;
 
-  if (!name || typeof name !== "string" || !name.trim()) {
-    return res.status(400).json({
-      success: false,
-      message: "name is required and must be a valid non-empty string.",
+    // Use verified identity email if available
+    const resolvedEmail = authUser?.email || email;
+
+    if (!name || typeof name !== "string" || !name.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "name is required and must be a valid non-empty string.",
+      });
+    }
+
+    if (!resolvedEmail || typeof resolvedEmail !== "string" || !EMAIL_REGEX.test(resolvedEmail.trim())) {
+      return res.status(400).json({
+        success: false,
+        message: "Valid email address is required.",
+      });
+    }
+
+    // Role security: Never allow self-service role assignment.
+    // Only an authenticated admin can specify a role other than "user".
+    let assignedRole = "user";
+    if (authUser && authUser.role === "admin" && role && isValidRole(role)) {
+      assignedRole = normalizeRole(role);
+    }
+
+    // Check if user already exists
+    const existingUser = await usersService.getUserByEmail(resolvedEmail.trim());
+    if (existingUser) {
+      // Link firebase_uid if available and not yet set
+      if (authUser?.uid && !existingUser.firebase_uid) {
+        await usersService.updateUser(existingUser.id, {
+          firebase_uid: authUser.uid,
+        });
+      }
+      return res.status(200).json({
+        success: true,
+        message: "User already exists",
+        data: existingUser,
+      });
+    }
+
+    const user = await usersService.createUser({
+      name,
+      email: resolvedEmail,
+      role: assignedRole,
+      firebase_uid: authUser?.uid || null,
     });
-  }
 
-  if (!email || typeof email !== "string" || !EMAIL_REGEX.test(email.trim())) {
-    return res.status(400).json({
-      success: false,
-      message: "Valid email address is required.",
-    });
-  }
-
-  // Validate role strictly against existing PostgreSQL user roles
-  if (role !== undefined && !isValidRole(role)) {
-    return res.status(400).json({
-      success: false,
-      message: `Invalid role '${role}'. Role must be one of: ${VALID_ROLES.join(", ")}.`,
-    });
-  }
-
-  // ✅ Check if user already exists — return them instead of conflicting
-  const existingUser = await usersService.getUserByEmail(email.trim());
-  if (existingUser) {
-    return res.status(200).json({
+    res.status(201).json({
       success: true,
-      message: "User already exists",
-      data: existingUser,
+      message: "User created successfully",
+      data: user,
     });
+  } catch (err) {
+    next(err);
   }
-
-  const user = await usersService.createUser({
-    name,
-    email,
-    role: normalizeRole(role || "USER"),
-  });
-
-  res.status(201).json({
-    success: true,
-    message: "User created successfully",
-    data: user,
-  });
 };
 
 /**
  * GET /api/users - Get all users (supports pagination, role filtering & search)
+ * Regular users may only access their own profile.
  */
-const getAllUsers = async (req, res) => {
-  if (req.query.email) {
-    return getUserbyEmail(req, res);
+const getAllUsers = async (req, res, next) => {
+  try {
+    const authUser = req.user;
+
+    // Email-specific profile query
+    if (req.query.email) {
+      if (authUser && authUser.role === "user") {
+        const emailQuery = req.query.email?.trim().toLowerCase();
+        const userEmail = authUser.email?.trim().toLowerCase();
+
+        if (emailQuery !== userEmail) {
+          return res.status(403).json({
+            success: false,
+            message: "Forbidden: Regular users can only access their own profile.",
+          });
+        }
+      }
+      return getUserbyEmail(req, res, next);
+    }
+
+    // Regular users cannot manage or enumerate all users; only staff/agents for display
+    if (authUser && authUser.role === "user") {
+      const staffMembers = await usersService.getAllUsers({ role: "agent" });
+      return res.json({
+        success: true,
+        ...staffMembers,
+      });
+    }
+
+    const result = await usersService.getAllUsers(req.query);
+
+    res.json({
+      success: true,
+      ...result,
+    });
+  } catch (err) {
+    next(err);
   }
-
-  const result = await usersService.getAllUsers(req.query);
-
-  res.json({
-    success: true,
-    ...result,
-  });
 };
 
 /**
@@ -188,6 +231,85 @@ const deleteUser = async (req, res) => {
   });
 };
 
+/**
+ * PATCH /api/users/:id/role - Update user role in Firebase custom claims & PostgreSQL (Admin only)
+ */
+const updateUserRole = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { role } = req.body;
+
+    if (!role || typeof role !== "string" || !isValidRole(role)) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid role '${role}'. Role must be one of: ${VALID_ROLES.join(", ")}.`,
+      });
+    }
+
+    const normalizedRole = normalizeRole(role);
+
+    // Resolve target user: id could be integer (PostgreSQL id) or Firebase UID
+    let targetUid = null;
+    let dbUser = null;
+
+    if (!isNaN(Number(id))) {
+      dbUser = await usersService.getUserById(parseInt(id, 10));
+      if (!dbUser) {
+        return res.status(404).json({
+          success: false,
+          message: `User with ID ${id} not found in database.`,
+        });
+      }
+      if (dbUser.firebase_uid) {
+        targetUid = dbUser.firebase_uid;
+      } else if (dbUser.email) {
+        try {
+          const fbUser = await firebaseAuthService.getUserByEmail(dbUser.email);
+          targetUid = fbUser.uid;
+        } catch (e) {
+          // Firebase user not found by email
+        }
+      }
+    } else {
+      // id is a Firebase UID
+      targetUid = id;
+      try {
+        const fbUser = await firebaseAuthService.getUserByUid(id);
+        targetUid = fbUser.uid;
+      } catch (e) {
+        // Continue with id as UID
+      }
+    }
+
+    if (!targetUid) {
+      return res.status(404).json({
+        success: false,
+        message: `Could not resolve target Firebase UID for user '${id}'.`,
+      });
+    }
+
+    // Set custom claims in Firebase & sync with DB
+    await firebaseAuthService.setRole(targetUid, normalizedRole);
+
+    // Fetch updated user from DB
+    const updatedDbUser = dbUser
+      ? await usersService.getUserById(dbUser.id)
+      : await usersService.getUserByEmail(id);
+
+    return res.status(200).json({
+      success: true,
+      message: `User role successfully updated to '${normalizedRole}'.`,
+      data: {
+        uid: targetUid,
+        role: normalizedRole,
+        user: updatedDbUser,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   createUser,
   getAllUsers,
@@ -195,5 +317,6 @@ module.exports = {
   getUserbyEmail,
   getUserByEmail: getUserbyEmail,
   updateUser,
+  updateUserRole,
   deleteUser,
 };

@@ -48,7 +48,7 @@ import { listMoviesRef } from '@dataconnect/generated';
 
 const ref = listMoviesRef();
 const { data } = await executeQuery(ref);
-console.log(data.movies);
+// console.log(data.movies);
 ```
 
 #### Using Action Shortcuts
@@ -73,11 +73,11 @@ if (queryResult.data) {
   switch (oldestMovieAspectRatio) {
       case AspectRatio.ACADEMY:
       case AspectRatio.WIDESCREEN:
-        console.log('Filmed in Academy or Widescreen!');
+        // console.log('Filmed in Academy or Widescreen!');
         break;
       default:
         // The default case will catch FULLSCREEN, etc.
-        console.log('Not filmed in Academy or Widescreen.');
+        // console.log('Not filmed in Academy or Widescreen.');
         break;
   }
 }
@@ -117,7 +117,7 @@ import { getMovieByIdRef } from '@dataconnect/generated';
 const queryRef = getMovieByIdRef({ id: "<MOVIE_ID>" });
 
 const unsubscribe = subscribe(queryRef, (result) => {
-  console.log("Updated result:", result);
+  // console.log("Updated result:", result);
 });
 ```
 

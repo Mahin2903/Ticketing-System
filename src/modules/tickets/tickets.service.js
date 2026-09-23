@@ -41,7 +41,7 @@ const createTicket = async ({
 
   const values = [
     ticketNumber,
-    parseInt(user_id, 10),
+    String(user_id).trim(),
     subject.trim(),
     description.trim(),
     formattedPriority,
@@ -121,13 +121,13 @@ const getTickets = async ({
   }
 
   if (user_id) {
-    queryParams.push(parseInt(user_id, 10));
-    conditions.push(`user_id = $${queryParams.length}`);
+    queryParams.push(String(user_id).trim());
+    conditions.push(`(user_id = $${queryParams.length} OR user_id IN (SELECT id::text FROM users WHERE firebase_uid = $${queryParams.length}))`);
   }
 
   if (email) {
     queryParams.push(email.trim().toLowerCase());
-    conditions.push(`user_id IN (SELECT id FROM users WHERE LOWER(email) = $${queryParams.length})`);
+    conditions.push(`(user_id IN (SELECT id::text FROM users WHERE LOWER(email) = $${queryParams.length}) OR user_id IN (SELECT firebase_uid FROM users WHERE LOWER(email) = $${queryParams.length}))`);
   }
 
   if (assigned_to) {
@@ -218,7 +218,7 @@ const updateTicketStatus = async (idOrNumber, status) => {
 
   // Step 4: When a ticket's status is updated to 'COMPLETED', fetch creator and send confirmation email
   if ((formattedStatus === "COMPLETE" || rawStatus === "COMPLETED") && updatedTicket) {
-    db.query(`SELECT id, name, email FROM users WHERE id = $1`, [updatedTicket.user_id])
+    db.query(`SELECT id, name, email FROM users WHERE firebase_uid = $1 OR id::text = $1`, [updatedTicket.user_id])
       .then((creatorRes) => {
         if (creatorRes.rows[0]?.email) {
           sendTicketCompletedNotification(updatedTicket, creatorRes.rows[0]);
@@ -305,7 +305,7 @@ const updateTicket = async (idOrNumber, updateFields) => {
     // Check for status completion
     const rawStatus = updateFields.status ? String(updateFields.status).toUpperCase() : "";
     if (rawStatus === "COMPLETE" || rawStatus === "COMPLETED") {
-      db.query(`SELECT id, name, email FROM users WHERE id = $1`, [updatedTicket.user_id])
+      db.query(`SELECT id, name, email FROM users WHERE firebase_uid = $1 OR id::text = $1`, [updatedTicket.user_id])
         .then((creatorRes) => {
           if (creatorRes.rows[0]?.email) {
             sendTicketCompletedNotification(updatedTicket, creatorRes.rows[0]);

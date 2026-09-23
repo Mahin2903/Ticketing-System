@@ -23,7 +23,7 @@ signature.
 ```typescript
 export const processOrder = functions.pubsub.topic("orders").onPublish((message, context) => {
   const orderId = message.json.id;
-  console.log(`Processing order ${orderId} at ${context.timestamp}`);
+  // console.log(`Processing order ${orderId} at ${context.timestamp}`);
 });
 ```
 
@@ -35,7 +35,7 @@ we destructure `{ message, context }` directly:
 ```typescript
 export const processOrder = onMessagePublished("orders", ({ message, context }) => {
   const orderId = message.json.id; // Legacy logic remains untouched!
-  console.log(`Processing order ${orderId} at ${context.timestamp}`);
+  // console.log(`Processing order ${orderId} at ${context.timestamp}`);
 });
 ```
 

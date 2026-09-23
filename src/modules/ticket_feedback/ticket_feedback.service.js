@@ -41,7 +41,7 @@ const createFeedback = async ({ ticket_id, user_id, comment }) => {
 
   // 3. Verify user exists
   const userResult = await db.query(
-    `SELECT id, name, email, role
+    `SELECT id, name, email, role, firebase_uid
      FROM users
      WHERE id = $1`,
     [parsedUserId]
@@ -54,7 +54,11 @@ const createFeedback = async ({ ticket_id, user_id, comment }) => {
   const user = userResult.rows[0];
 
   // 4. Verify user authorization (ticket creator or staff role)
-  if (ticket.user_id && parsedUserId !== ticket.user_id && !isStaffRole(user.role)) {
+  const isCreator =
+    String(ticket.user_id) === String(user.id) ||
+    (user.firebase_uid && String(ticket.user_id) === String(user.firebase_uid));
+
+  if (ticket.user_id && !isCreator && !isStaffRole(user.role)) {
     return {
       error: "UNAUTHORIZED_FEEDBACK",
       message: "Only the user who created the ticket can submit feedback for it.",

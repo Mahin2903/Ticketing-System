@@ -52,7 +52,7 @@ const docRef = await addDoc(collection(db, "cities"), {
   name: "Tokyo",
   country: "Japan"
 });
-console.log("Document written with ID: ", docRef.id);
+// console.log("Document written with ID: ", docRef.id);
 ```
 
 ### Update a Document (`updateDoc`)
@@ -89,9 +89,9 @@ try {
     const newPopulation = sfDoc.data().population + 1;
     transaction.update(sfDocRef, { population: newPopulation });
   });
-  console.log("Transaction successfully committed!");
+  // console.log("Transaction successfully committed!");
 } catch (e) {
-  console.log("Transaction failed: ", e);
+  // console.log("Transaction failed: ", e);
 }
 ```
 
@@ -106,9 +106,9 @@ const docRef = doc(db, "cities", "SF");
 const docSnap = await getDoc(docRef);
 
 if (docSnap.exists()) {
-  console.log("Document data:", docSnap.data());
+  // console.log("Document data:", docSnap.data());
 } else {
-  console.log("No such document!");
+  // console.log("No such document!");
 }
 ```
 
@@ -122,7 +122,7 @@ import { collection, getDocs } from "firebase/firestore";
 const querySnapshot = await getDocs(collection(db, "cities"));
 querySnapshot.forEach((doc) => {
   // doc.data() is never undefined for query doc snapshots
-  console.log(doc.id, " => ", doc.data());
+  // console.log(doc.id, " => ", doc.data());
 });
 ```
 
@@ -134,7 +134,7 @@ querySnapshot.forEach((doc) => {
 import { doc, onSnapshot } from "firebase/firestore";
 
 const unsub = onSnapshot(doc(db, "cities", "SF"), (doc) => {
-    console.log("Current data: ", doc.data());
+    // console.log("Current data: ", doc.data());
 });
 
 // Stop listening
@@ -150,13 +150,13 @@ const q = query(collection(db, "cities"), where("state", "==", "CA"));
 const unsubscribe = onSnapshot(q, (snapshot) => {
   snapshot.docChanges().forEach((change) => {
     if (change.type === "added") {
-        console.log("New city: ", change.doc.data());
+        // console.log("New city: ", change.doc.data());
     }
     if (change.type === "modified") {
-        console.log("Modified city: ", change.doc.data());
+        // console.log("Modified city: ", change.doc.data());
     }
     if (change.type === "removed") {
-        console.log("Removed city: ", change.doc.data());
+        // console.log("Removed city: ", change.doc.data());
     }
   });
 });

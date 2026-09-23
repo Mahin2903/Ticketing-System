@@ -7,10 +7,17 @@ const {
 
 /**
  * POST /api/tickets - Create a new ticket
+ * Security: Uses req.user.uid as ticket creator, never trusting client-supplied userId
  */
 const createTicket = async (req, res, next) => {
   try {
-    const validation = validateCreateTicket(req.body);
+    // Always bind creator identity to authenticated Firebase user UID
+    const payload = {
+      ...req.body,
+      user_id: req.user.uid,
+    };
+
+    const validation = validateCreateTicket(payload);
     if (!validation.isValid) {
       return res.status(400).json({
         success: false,
@@ -18,7 +25,7 @@ const createTicket = async (req, res, next) => {
       });
     }
 
-    const ticket = await ticketsService.createTicket(req.body);
+    const ticket = await ticketsService.createTicket(payload);
 
     res.status(201).json({
       success: true,
@@ -32,31 +39,95 @@ const createTicket = async (req, res, next) => {
 
 /**
  * GET /api/tickets - Get tickets with filters and pagination
+ * Security: USER role is strictly scoped to own tickets, ignoring client overrides
  */
 const getTickets = async (req, res, next) => {
   try {
+    const authUser = req.user;
     const {
       status,
       priority,
       department_id,
       help_topic_id,
-      user_id,
-      email,
       assigned_to,
       page = 1,
       limit = 20,
     } = req.query;
+
+    let queryUserId = req.query.user_id;
+    let queryEmail = req.query.email;
+
+    // Enforce ownership filter for standard USER role
+    if (authUser && authUser.role === "user") {
+      queryUserId = authUser.uid;
+      queryEmail = undefined;
+    }
 
     const tickets = await ticketsService.getTickets({
       status,
       priority,
       department_id,
       help_topic_id,
-      user_id,
-      email,
+      user_id: queryUserId,
+      email: queryEmail,
       assigned_to,
       page: parseInt(page, 10),
       limit: parseInt(limit, 10),
+    });
+
+    res.json({
+      success: true,
+      count: tickets.length,
+      data: tickets,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * GET /api/tickets/my - Explicit endpoint to fetch authenticated user's tickets
+ */
+const getMyTickets = async (req, res, next) => {
+  try {
+    const authUser = req.user;
+    const { status, priority, page = 1, limit = 50 } = req.query;
+
+    const tickets = await ticketsService.getTickets({
+      status,
+      priority,
+      user_id: authUser.uid,
+      page: parseInt(page, 10),
+      limit: parseInt(limit, 10),
+    });
+
+    res.json({
+      success: true,
+      count: tickets.length,
+      data: tickets,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * GET /api/tickets/assigned - Fetch tickets assigned to the authenticated agent
+ */
+const getAssignedTickets = async (req, res, next) => {
+  try {
+    const authUser = req.user;
+    const targetAssignedTo =
+      authUser.role === "admin" && req.query.assigned_to
+        ? req.query.assigned_to
+        : authUser.dbId;
+
+    const tickets = await ticketsService.getTickets({
+      status: req.query.status,
+      priority: req.query.priority,
+      assigned_to: targetAssignedTo,
+      page: parseInt(req.query.page || 1, 10),
+      limit: parseInt(req.query.limit || 50, 10),
     });
 
     res.json({
@@ -91,6 +162,7 @@ const getTicketsByEmail = async (req, res, next) => {
 
 /**
  * GET /api/tickets/:id - Get ticket by ID or Ticket Number
+ * Security: Enforces ownership check - USER role cannot access other users' tickets
  */
 const getTicketById = async (req, res, next) => {
   try {
@@ -100,6 +172,20 @@ const getTicketById = async (req, res, next) => {
         success: false,
         message: "Ticket not found",
       });
+    }
+
+    // Ownership check for USER role
+    if (req.user && req.user.role === "user") {
+      const isOwner =
+        ticket.user_id === req.user.uid ||
+        (req.user.dbId && ticket.user_id === String(req.user.dbId));
+
+      if (!isOwner) {
+        return res.status(403).json({
+          success: false,
+          message: "Forbidden: You do not have permission to access another user's ticket.",
+        });
+      }
     }
 
     res.json({
@@ -259,6 +345,8 @@ const deleteTicket = async (req, res, next) => {
 module.exports = {
   createTicket,
   getTickets,
+  getMyTickets,
+  getAssignedTickets,
   getTicketsByEmail,
   getTicketsbyEmail: getTicketsByEmail,
   getTicketById,

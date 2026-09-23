@@ -4,11 +4,11 @@ const db = require("../../config/db");
 /**
  * Create a new user
  */
-const createUser = async ({ name, email, role = "user", role_category_id = null }) => {
+const createUser = async ({ name, email, role = "user", role_category_id = null, firebase_uid = null }) => {
   const queryText = `
-    INSERT INTO users (name, email, role, role_category_id)
-    VALUES ($1, $2, $3, $4)
-    RETURNING id, name, email, role, role_category_id, created_at
+    INSERT INTO users (name, email, role, role_category_id, firebase_uid)
+    VALUES ($1, $2, $3, $4, $5)
+    RETURNING id, name, email, role, role_category_id, firebase_uid, created_at
   `;
 
   const values = [
@@ -16,6 +16,7 @@ const createUser = async ({ name, email, role = "user", role_category_id = null 
     email.trim().toLowerCase(),
     role.trim(),
     role_category_id ? parseInt(role_category_id, 10) : null,
+    firebase_uid ? firebase_uid.trim() : null,
   ];
   const result = await db.query(queryText, values);
   return result.rows[0];
@@ -98,7 +99,7 @@ const getUserById = async (id) => {
  * Update user by ID
  */
 const updateUser = async (id, data) => {
-  const { name, email, role, role_category_id } = data;
+  const { name, email, role, role_category_id, firebase_uid } = data;
   const updates = [];
   const params = [];
 
@@ -115,6 +116,11 @@ const updateUser = async (id, data) => {
   if (role !== undefined) {
     params.push(role.trim());
     updates.push(`role = $${params.length}`);
+  }
+
+  if (firebase_uid !== undefined) {
+    params.push(firebase_uid ? firebase_uid.trim() : null);
+    updates.push(`firebase_uid = $${params.length}`);
   }
 
   if (role_category_id !== undefined) {
@@ -135,7 +141,7 @@ const updateUser = async (id, data) => {
     UPDATE users
     SET ${updates.join(", ")}
     WHERE id = $${params.length}
-    RETURNING id, name, email, role, role_category_id, created_at
+    RETURNING id, name, email, role, role_category_id, firebase_uid, created_at
   `;
 
   const result = await db.query(queryText, params);

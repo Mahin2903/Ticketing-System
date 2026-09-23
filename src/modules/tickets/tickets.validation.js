@@ -26,8 +26,8 @@ const validateCreateTicket = (data) => {
     errors.push("Description is required and must be a non-empty string.");
   }
 
-  if (data.user_id === undefined || data.user_id === null || !isInteger(data.user_id)) {
-    errors.push("user_id is required and must be an integer.");
+  if (data.user_id === undefined || data.user_id === null || (typeof data.user_id === "string" && !data.user_id.trim())) {
+    errors.push("user_id is required.");
   }
 
   if (!data.mobile || typeof data.mobile !== "string" || !data.mobile.trim()) {

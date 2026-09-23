@@ -114,13 +114,13 @@ const q = query(collection(db, "tasks"), where("status", "==", "pending"));
 const unsubscribe = onSnapshot(q, (snapshot) => {
   snapshot.docChanges().forEach((change) => {
     if (change.type === "added") {
-        console.log("Added Task: ", change.doc.id, change.doc.data());
+        // console.log("Added Task: ", change.doc.id, change.doc.data());
     }
     if (change.type === "modified") {
-        console.log("Updated Task: ", change.doc.id, change.doc.data());
+        // console.log("Updated Task: ", change.doc.id, change.doc.data());
     }
     if (change.type === "removed") {
-        console.log("Removed Task: ", change.doc.id, change.doc.data());
+        // console.log("Removed Task: ", change.doc.id, change.doc.data());
     }
   });
 });

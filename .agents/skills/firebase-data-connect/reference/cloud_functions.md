@@ -116,9 +116,9 @@ export const processSensitiveMutation = onMutationExecuted(
   { operation: "UpdateFinancials" },
   (event) => {
     if (event.authType === "admin") {
-      console.log("Elevated admin mutation execution.");
+      // console.log("Elevated admin mutation execution.");
     } else {
-      console.log(`Mutation initiated by user: ${event.authId}`);
+      // console.log(`Mutation initiated by user: ${event.authId}`);
     }
   }
 );

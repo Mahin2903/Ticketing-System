@@ -262,7 +262,7 @@ import { listItems, createItem } from '@myapp/dataconnect';
 
 // List items
 const { data } = await listItems();
-console.log(data.items);
+// console.log(data.items);
 
 // Create item (requires auth)
 await createItem({ name: 'New Item', description: 'Description' });

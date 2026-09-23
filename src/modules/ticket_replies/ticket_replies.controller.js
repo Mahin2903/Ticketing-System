@@ -1,10 +1,9 @@
 const ticketRepliesService = require("./ticket_replies.service");
+const ticketsService = require("../tickets/tickets.service");
 const { validateCreateReply } = require("./ticket_replies.validation");
 
 /**
  * Ticket Replies Controller
- * Note: Following the clean code requirement, no explicit try/catch blocks are used.
- * Unhandled exceptions bubble directly to the Express 5 global error middleware.
  */
 
 /**
@@ -13,12 +12,42 @@ const { validateCreateReply } = require("./ticket_replies.validation");
  */
 const createReply = async (req, res) => {
   const ticketId = req.params.ticketId || req.params.id || req.body.ticket_id;
-  const { user_id, message } = req.body;
+  
+  if (!ticketId) {
+    return res.status(400).json({
+      success: false,
+      message: "Ticket ID is required.",
+    });
+  }
 
+  const ticket = await ticketsService.getTicketById(ticketId);
+  if (!ticket) {
+    return res.status(404).json({
+      success: false,
+      message: `Ticket with ID ${ticketId} not found.`,
+    });
+  }
+
+  // SECURITY: Regular users can only reply to their own tickets
+  if (req.user && req.user.role === "user") {
+    const isOwner =
+      ticket.user_id === req.user.uid ||
+      (req.user.dbId && ticket.user_id === String(req.user.dbId));
+
+    if (!isOwner) {
+      return res.status(403).json({
+        success: false,
+        message: "Forbidden: You do not have permission to reply to another user's ticket.",
+      });
+    }
+  }
+
+  // Author identity strictly bound to authenticated user
+  const authorUserId = req.user?.dbId || req.user?.id;
   const payload = {
-    ticket_id: ticketId,
-    user_id,
-    message,
+    ticket_id: ticket.id,
+    user_id: authorUserId,
+    message: req.body.message,
   };
 
   const validation = validateCreateReply(payload);
@@ -41,7 +70,7 @@ const createReply = async (req, res) => {
   if (result.error === "USER_NOT_FOUND") {
     return res.status(404).json({
       success: false,
-      message: `User with ID ${user_id} not found.`,
+      message: `User record not found for authenticated user.`,
     });
   }
 
@@ -65,6 +94,28 @@ const getRepliesByTicket = async (req, res) => {
       success: false,
       message: "A valid positive integer ticket ID is required.",
     });
+  }
+
+  const ticket = await ticketsService.getTicketById(parsedTicketId);
+  if (!ticket) {
+    return res.status(404).json({
+      success: false,
+      message: `Ticket with ID ${parsedTicketId} not found.`,
+    });
+  }
+
+  // SECURITY: Regular users can only view replies of their own tickets
+  if (req.user && req.user.role === "user") {
+    const isOwner =
+      ticket.user_id === req.user.uid ||
+      (req.user.dbId && ticket.user_id === String(req.user.dbId));
+
+    if (!isOwner) {
+      return res.status(403).json({
+        success: false,
+        message: "Forbidden: You do not have permission to view replies for another user's ticket.",
+      });
+    }
   }
 
   const replies = await ticketRepliesService.getRepliesByTicketId(parsedTicketId);

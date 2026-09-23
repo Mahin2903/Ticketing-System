@@ -15,7 +15,7 @@ const {
 const createFeedback = async (req, res, next) => {
   try {
     const ticketId = req.params.ticketId || req.params.id || req.body.ticket_id;
-    const userId = req.user?.id || req.body.user_id;
+    const userId = req.user?.dbId || req.user?.id;
     const comment = req.body.comment || req.body.message || req.body.feedback;
 
     const payload = {
@@ -171,7 +171,7 @@ const updateFeedback = async (req, res, next) => {
   try {
     const feedbackId = req.params.id;
     const comment = req.body.comment || req.body.message || req.body.feedback;
-    const userId = req.user?.id || req.body.user_id;
+    const userId = req.user?.dbId || req.user?.id;
 
     const validation = validateUpdateFeedback({ comment });
     if (!validation.isValid) {

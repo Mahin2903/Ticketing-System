@@ -109,7 +109,7 @@ async function streamResponse(prompt) {
   const result = await model.generateContentStream(prompt);
   for await (const chunk of result.stream) {
     const chunkText = chunk.text();
-    console.log("Stream chunk:", chunkText);
+    // console.log("Stream chunk:", chunkText);
     // Update UI here
   }
 }
@@ -148,7 +148,7 @@ try {
   const inlineDataParts = result.response.inlineDataParts();
   if (inlineDataParts?.[0]) {
     const image = inlineDataParts[0].inlineData;
-    console.log(image.mimeType, image.data);
+    // console.log(image.mimeType, image.data);
   }
 } catch (err) {
   console.error('Prompt or candidate was blocked:', err);
